@@ -28,7 +28,7 @@ int getnum(int x,int y)
 
 int main()
 {
-    freopen("1.in","r",stdin);
+   // freopen("1.in","r",stdin);
     //freopen("1.out","w",stdout);
     while (~scanf("%s",s+1))  
     {
