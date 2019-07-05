@@ -201,8 +201,6 @@ void WB()
 
 int main()
 {
-    freopen("1.in","r",stdin);
-    //freopen("1.out","w",stdout);
     while (~scanf("%s",s+1))  
     {
         if (s[1]=='@') cur_id=trans(2);
