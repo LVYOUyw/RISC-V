@@ -6,8 +6,22 @@ int pool[200005];
 unsigned int order[200005],IR;
 char s[1005],w[1005];
 int cur_id,reg[32],rs1,rs2,imm,rd,immt,opcode;
-int funct3,funct7,address,ans,pd;
-int ans_mem;
+int funct3,funct7,address,ans,pd,cnt;
+int ans_mem,ans_wb;
+struct node
+{
+    int rs1,rs2,imm,immt,rd,opcode;
+    int funct3,funct7,address,ans,pd;
+
+    void clear()
+    {
+        rs1=rs2=imm=immt=rd=opcode=0;
+        funct3=funct7=address=ans=pd=0;
+    }
+}a[6];
+int shut_if,shut_ex,shut_mem;
+bool change[32],pause;
+
 typedef long long LL;
 const int c3=(1<<3)-1;
 const int c4=(1<<4)-1;
@@ -23,6 +37,36 @@ const int c10=(1<<10)-1;
 const int c12=(1<<12)-1;
 const int c11=(1<<11)-1;
 const int c32=-1;
+
+inline void init(int x) 
+{
+    rs1=a[x].rs1;
+    rs2=a[x].rs2;
+    imm=a[x].imm;
+    immt=a[x].immt;
+    rd=a[x].rd;
+    opcode=a[x].opcode;
+    funct3=a[x].funct3;
+    funct7=a[x].funct7;
+    address=a[x].address;
+    ans=a[x].ans;
+    pd=a[x].pd;
+}
+
+inline void pack(int x)
+{
+    a[x].rs1=rs1;
+    a[x].rs2=rs2;
+    a[x].imm=imm;
+    a[x].immt=immt;
+    a[x].rd=rd;
+    a[x].opcode=opcode;
+    a[x].funct3=funct3;
+    a[x].funct7=funct7;
+    a[x].address=address;
+    a[x].ans=ans;
+    a[x].pd=pd;
+}
 
 int trans(int l) 
 {
@@ -49,19 +93,23 @@ int extend(int x,int len)
 
 void IF() 
 {
+    if (shut_if) {shut_if--;cnt++;return;}
     IR=order[cur_id];
-    printf("%x\n",IR);
+    //printf("%x\n",IR);
     if (IR==0x00c68223) 
     {
-        printf("%d\n",(unsigned int)reg[10]&255u);
-        exit(0);
+        shut_if=10000;
+        IR=0;
+        return;
     }
+   // printf("IF\t");
     cur_id+=4;
 }
 
 void ID() 
 {
     opcode=IR&c7;
+    if (opcode==0) {cnt++;return;}
     rs1=(IR>>15)&c5;
     rs2=(IR>>20)&c5;
     rd=(IR>>7)&c5;
@@ -91,13 +139,22 @@ void ID()
         imm<<=1;
         immt=extend(imm,21);
     }
+    //printf("ID\t");
+    pack(3);
+    if (opcode==99||opcode==111||opcode==103||opcode==23) shut_if=2;
+    IR=0;
 }
 
 void EX()
 {
+    init(3);
+    if (opcode==0) {cnt++;return;}
+    if (change[rs1]) {pause=1;return;}
     if (opcode==3||opcode==35) address=reg[rs1]+immt; //load and store
+    if (opcode==3) change[rd]=1;
     if (opcode==51)  //reg - reg alu
     {
+        if (change[rs2]) {pause=1;return;}
         if (funct3==0) 
             if (funct7) ans=reg[rs1]-reg[rs2]; //sub
             else ans=reg[rs1]+reg[rs2];  //add
@@ -121,6 +178,7 @@ void EX()
             ans=reg[rs1]<reg[rs2]?1:reg[rd];
         else if (funct3==3) //sltu
             ans=(unsigned int)reg[rs1]<(unsigned int)reg[rs2]?1:reg[rd];
+        change[rd]=1;
     }
     if (opcode==19) //reg-imm alu
     {
@@ -139,9 +197,11 @@ void EX()
             }
         else if (funct3==2) ans=reg[rs1]<immt?1:reg[rd]; //slti
         else if (funct3==3) ans=(unsigned int)reg[rs1]<(unsigned int)immt?1:reg[rd]; //sltiu
+        change[rd]=1;
     }
     if (opcode==99) //control
     {
+        if (change[rs2]) {pause=1;return;}
         address=cur_id-4+immt;
         if (funct3==0) pd=reg[rs1]==reg[rs2]; //beq
         else if (funct3==1) pd=reg[rs1]!=reg[rs2]; //bne
@@ -150,21 +210,30 @@ void EX()
         else if (funct3==6) pd=(unsigned int)reg[rs1]<(unsigned int)reg[rs2]; //bltu
         else if (funct3==7) pd=(unsigned int)reg[rs1]>=(unsigned int)reg[rs2]; //bgeu
     }
-    if (opcode==111) ans=cur_id,address=cur_id-4+immt,pd=1; //jal
-    if (opcode==103) ans=cur_id,address=reg[rs1]+immt,pd=1; //jalr
-    if (opcode==55) ans=imm<<12; //lui
-    if (opcode==23) address=cur_id-4+(imm<<12),ans=address; //auipc
+    if (opcode==111) ans=cur_id,address=cur_id-4+immt,pd=1,change[rd]=1; //jal
+    if (opcode==103) ans=cur_id,address=reg[rs1]+immt,pd=1,change[rd]=1; //jalr
+    if (opcode==55) ans=imm<<12,change[rd]=1; //lui
+    if (opcode==23) address=cur_id-4+(imm<<12),ans=address,change[rd]=1; //auipc
+    pack(4);
+    a[3].clear();
+   // printf("EX\t");
 } 
 
 void MEM() 
 {
+    init(4);
+    if (opcode==0) {cnt++;return;}
     if (opcode==3) //load 
     {
-        if (funct3==0) ans_mem=extend(pool[address],8); //lb
-        else if (funct3==1) ans_mem=extend((pool[address+1]<<8)|pool[address],16); //lh
-        else if (funct3==2) ans_mem=(pool[address+3]<<24)+(pool[address+2]<<16)+(pool[address+1]<<8)+pool[address]; //lw
-        else if (funct3==4) ans_mem=pool[address]; //lbu
-        else if (funct3==5) ans_mem=(pool[address+1]<<8)|pool[address]; //lhu
+        if (funct3==0) ans=extend(pool[address],8); //lb
+        else if (funct3==1) ans=extend((pool[address+1]<<8)|pool[address],16); //lh
+        else if (funct3==2) 
+        {
+            ans=(pool[address+3]<<24)+(pool[address+2]<<16)+(pool[address+1]<<8)+pool[address]; //lw
+            //printf("--lw %d %x--\n",rd,ans);
+        }
+        else if (funct3==4) ans=pool[address]; //lbu
+        else if (funct3==5) ans=(pool[address+1]<<8)|pool[address]; //lhu
     }
     if (opcode==35) //store
     {
@@ -178,6 +247,7 @@ void MEM()
         }
         else //sw
         {
+            //printf("--sw  %x--\n",rs2);
             int x=reg[rs2];
             int y=x&c24;
             int z=y&c16;
@@ -190,18 +260,24 @@ void MEM()
     }
     if (opcode==99||opcode==111||opcode==103||opcode==23) 
         cur_id=pd?address:cur_id;
+    pack(5);
+    a[4].clear();
+   // printf("MEM\t");
 } 
 
 void WB() 
 {
-    if (opcode==51||opcode==19||opcode==111||opcode==55||opcode==23||opcode==103) reg[rd]=ans;
-    if (opcode==3) reg[rd]=ans_mem;
+    init(5);
+    if (opcode==0) {cnt++;return;}
+    if (opcode==51||opcode==19||opcode==111||opcode==55||opcode==23||opcode==103||opcode==3) reg[rd]=ans,change[rd]=0;
     reg[0]=0;
+    a[5].clear();
+  //  printf("WB\t");
 }
 
 int main()
 {
-    freopen("1.in","r",stdin);
+   // freopen("1.in","r",stdin);
     while (~scanf("%s",s+1))  
     {
         if (s[1]=='@') cur_id=trans(2);
@@ -225,15 +301,19 @@ int main()
         }
     }
     cur_id=0;
-    int cnt=0;
     while (1) 
     {
-        cnt++;
-        IF();
-        ID();
-        EX();
-        MEM();
+        cnt=0;
         WB();
+        MEM();
+        EX();
+        if (pause) {pause=0;continue;}
+        ID();
+        IF();
+        if (cnt==5) break;
+       // printf("a0:%x\n",reg[10]);
+        //puts("");
     }
+    printf("%d\n",(unsigned int)reg[10]&255u);
     return 0;
 }
