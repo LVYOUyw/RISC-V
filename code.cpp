@@ -28,8 +28,8 @@ int getnum(int x,int y)
 
 int main()
 {
-   // freopen("1.in","r",stdin);
-    //freopen("1.out","w",stdout);
+    freopen("1.in","r",stdin);
+    freopen("1.out","w",stdout);
     while (~scanf("%s",s+1))  
     {
         if (s[1]=='@') cur_id=trans(2);
@@ -76,7 +76,7 @@ int main()
             printf("%d\n",cnt);
             break;
         }
-       // if (cnt>=49500000) printf("%x\n",ord);
+       printf("%x\n",ord);
         reg[0]=0;
         cur_id+=4;
         cnt++;

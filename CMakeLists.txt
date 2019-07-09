@@ -4,4 +4,4 @@ project(RISCV_Simulator)
 set(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 
-add_executable(code merge_flow.cpp)
+add_executable(code merge_new.cpp)
